@@ -1,0 +1,7 @@
+﻿message_id,sender_type,sender_name,text,quiet_hours_flag
+m1,family,Mom,Are you coming home for dinner?,0
+m2,business,PhonePe Cashback Desk,"Claim your ₹500 cashback now, click link!",0
+m3,group,School Group,Reminder: PTA meeting tomorrow 5pm,1
+m4,business,Amazon India,Your order has been delivered,0
+m5,unknown,-9876543119,"URGENT: your account will be suspended, verify now",1
+m6,business,Amazon India,"""URGENT: Verify your account now or lose access to Amazon Prime!""",1
