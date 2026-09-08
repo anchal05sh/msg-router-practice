@@ -211,7 +211,7 @@ def score_confidence(
     # confidence as a decisive immediate/muted call, even if the underlying
     # signal (e.g. sender trust) is strong. The signal explains WHY we're
     # deferring, not that we're certain deferring is correct.
-    if action == "wait":
+    if action == "wait" and not conflict:
         confidence = min(confidence, 0.70)
 
     return round(confidence, 2)
