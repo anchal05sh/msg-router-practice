@@ -50,13 +50,15 @@ Writes:
 
 ## Output schema
 
-`result.csv` columns: `message_id`, `action`, `reason`, `evidence`.
+`result.csv` columns: `message_id`, `action`, `reason`, `confidence`, `evidence`.
 
 | Action | Meaning |
 | --- | --- |
 | `immediate` | Notify now |
 | `wait` | Hold (quiet hours or conflicting signals) |
 | `muted` | Do not notify (suspicious sender or likely scam) |
+
+The `confidence` value is written as a decimal from `0.00` to `1.00` and reflects the strength and agreement of the signals, adjusted for the selected action.
 
 ## Decision logic
 
@@ -78,6 +80,14 @@ Then combine:
 | Legitimate **and** suspicious | Both | Any | `wait` (reason lists the conflict) |
 
 Quiet hours is applied **after** the two signals. It can turn a clean notify into `wait`, but it does not mute scams and it does not skip trust or keyword checks.
+
+## Confidence scoring
+
+Confidence combines signal strength, the amount of supporting evidence, and whether the signals agree. The selected action also affects the result:
+
+- `immediate` and `muted` decisions can retain the confidence implied by their signals.
+- A plain `wait` decision, such as a clean message deferred only because of quiet hours, is capped at `0.70` because it is a softer, reversible decision.
+- A `wait` caused by conflicting legitimate and suspicious signals uses the conflict score directly. It remains low when evidence disagrees and is never raised to the `0.70` ceiling.
 
 ## Sample results
 
