@@ -1,0 +1,7 @@
+message_id,action,reason,confidence,evidence
+m1,immediate,family/group sender during non-quiet-hours,0.83,sender_type=family; sender_name=Mom; quiet_hours_flag=0; urgency_keywords=none
+m2,muted,suspicious sender,0.94,sender_type=business; sender_name=PhonePe Cashback Desk; quiet_hours_flag=0; official_domain=phonepe.com; domain_used_by_sender=phonepe-rewards.in; verified=0; user_reports_30d=62; domain_mismatch=true; unverified_high_reports=true; urgency_keywords=click
+m3,wait,quiet hours,0.70,sender_type=group; sender_name=School Group; quiet_hours_flag=1; urgency_keywords=none
+m4,immediate,verified business sender,0.83,sender_type=business; sender_name=Amazon India; quiet_hours_flag=0; official_domain=amazon.in; domain_used_by_sender=amazon.in; verified=1; user_reports_30d=3; business_trust=verified; urgency_keywords=none
+m5,muted,likely scam,0.86,"sender_type=unknown; sender_name=-9876543119; quiet_hours_flag=1; urgency_keywords=urgent,verify now,suspended,suspend,account will"
+m6,wait,conflict: legitimate signals (verified business sender) vs suspicious signals (urgency language); quiet hours,0.33,sender_type=business; sender_name=Amazon India; quiet_hours_flag=1; official_domain=amazon.in; domain_used_by_sender=amazon.in; verified=1; user_reports_30d=3; business_trust=verified; urgency_keywords=urgent
