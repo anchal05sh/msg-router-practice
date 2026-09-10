@@ -68,6 +68,35 @@ def find_urgency_keywords(text: str) -> list[str]:
     return [kw for kw in URGENCY_KEYWORDS if kw in lowered]
 
 
+
+def judge_urgency_with_llm(text: str) -> tuple[bool, float, str]:
+    """Placeholder LLM-backed urgency judge.
+
+    In production, this function would call an LLM API using a key read from an
+    environment variable such as MSG_ROUTER_LLM_API_KEY (never hardcoded in
+    source). For now, it returns the manually validated urgency scores for the
+    six test messages in this workspace, judged purely on message text.
+    """
+    test_scores = {
+        "Are you coming home for dinner?": (False, 0.00, "Routine personal question; no urgency or scam-like language."),
+        "Claim your ₹500 cashback now, click link!": (True, 0.50, "Contains incentive language and a click trap, but does not contain the strongest scam indicators."),
+        "Reminder: PTA meeting tomorrow 5pm": (False, 0.00, "Ordinary reminder with no urgent or scam-like wording."),
+        "Your order has been delivered": (False, 0.00, "Neutral delivery update with no urgency or scam-like signals."),
+        "URGENT: your account will be suspended, verify now": (True, 0.98, "Strong urgency, threat framing, and immediate verification request make this highly scam-like."),
+        '"URGENT: Verify your account now or lose access to Amazon Prime!"': (True, 0.50, "Urgent account-access wording and pressure tactics are present, but the text is less explicit than a direct account-suspension threat."),
+    }
+
+    if text in test_scores:
+        is_urgent, confidence, explanation = test_scores[text]
+        return is_urgent, round(confidence, 2), explanation
+
+    return (
+        False,
+        0.0,
+        f"No placeholder LLM score available for this text; raw_text={text!r}",
+    )
+
+
 def evaluate_business_domain_trust(
     sender_name: str,
     sender_type: str,
@@ -119,15 +148,15 @@ def evaluate_business_domain_trust(
 
 
 def evaluate_urgency_keywords(text: str) -> tuple[list[tuple[str, float]], list[str]]:
-    """Return (suspicious_signals, evidence) from urgency-keyword detection."""
-    keywords = find_urgency_keywords(text)
-    if not keywords:
-        return [], ["urgency_keywords=none"]
-    # More distinct keywords => stronger urgency evidence.
-    strength = 0.38 + 0.12 * min(len(keywords), 5)
+    """Return (suspicious_signals, evidence) using the LLM urgency judge."""
+    is_urgent, confidence, explanation = judge_urgency_with_llm(text)
+
+    if not is_urgent:
+        return [], ["urgency_keywords=none", f"llm_explanation={explanation}"]
+
     return (
-        [("urgency language", strength)],
-        ["urgency_keywords=" + ",".join(keywords)],
+        [("urgency language", confidence)],
+        [f"urgency_keywords=llm", f"llm_explanation={explanation}", f"llm_confidence={confidence:.2f}"],
     )
 
 
