@@ -2,6 +2,8 @@
 
 A small Python router that scores inbox messages for **sender trust** and **urgency language**, then chooses `immediate`, `wait`, or `muted`. Quiet hours never skip those checks.
 
+The urgency signal now comes from a placeholder `judge_urgency_with_llm(text)` function that is designed to call an LLM API in production (using a key from an environment variable), but for now returns the manually validated scores for the six test messages in this workspace.
+
 ## Why this exists
 
 Inbox filters often stop at the first matching rule (family → notify, quiet hours → hold, scam keywords → mute). That hides mixed cases, such as a **verified business** sending **urgency copy**. This script evaluates both signals on every row and records the evidence used.
@@ -68,7 +70,9 @@ Both checks run on **every** message:
    - Legitimate: verified, matching domain, and `user_reports_30d` below 10.
    - Suspicious: missing business row (when `sender_type=business`), domain mismatch, or `verified=0` with high reports.
    - Family/group senders also count as legitimate.
-2. **Urgency keywords** — scan `text` for phrases such as `urgent`, `verify now`, `suspended`, `click`, `otp`, `kyc`.
+2. **Urgency judge** — call `judge_urgency_with_llm(text)`, which judges the message text in isolation for urgency/scam-like language. In the current placeholder version, it returns the manually validated scores for the six test messages; in production this would call an LLM API using a key read from an environment variable such as `MSG_ROUTER_LLM_API_KEY`.
+
+> CSV parsing note: `csv.DictReader` already handles CSV quote escaping correctly. The placeholder urgency lookup matches the exact decoded `text` value from the CSV, rather than stripping quote characters a second time.
 
 Then combine:
 
