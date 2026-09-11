@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Route inbox messages by combining independent trust and urgency signals.
 
+"""Route inbox messages by combining independent trust and urgency signals.
 Output includes a confidence score in [0.0, 1.0] based on how many signals
 agree, whether they conflict, and how strong each signal is.
 """
@@ -8,7 +8,20 @@ agree, whether they conflict, and how strong each signal is.
 from __future__ import annotations
 
 import csv
+import json
+import os
+import re
 from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - handled at runtime
+    load_dotenv = None
+
+try:
+    from google import genai
+except ImportError:  # pragma: no cover - handled at runtime
+    genai = None
 
 DATASET_DIR = Path(__file__).resolve().parent / "dataset"
 MESSAGES_PATH = DATASET_DIR / "messages.csv"
@@ -30,7 +43,6 @@ URGENCY_KEYWORDS = (
     "account will",
 )
 
-
 def load_business_accounts(path: Path) -> dict[str, dict[str, str]]:
     accounts: dict[str, dict[str, str]] = {}
     with path.open(newline="", encoding="utf-8-sig") as fh:
@@ -38,10 +50,10 @@ def load_business_accounts(path: Path) -> dict[str, dict[str, str]]:
             accounts[row["business_name"].strip()] = row
     return accounts
 
-
 def load_messages(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8-sig") as fh:
-        return list(csv.DictReader(fh))
+        messages = list(csv.DictReader(fh))
+        return messages
 
 
 def parse_report_count(value: str) -> int | None:
@@ -70,31 +82,70 @@ def find_urgency_keywords(text: str) -> list[str]:
 
 
 def judge_urgency_with_llm(text: str) -> tuple[bool, float, str]:
-    """Placeholder LLM-backed urgency judge.
+    """Judge message urgency using Gemini, with a safe fallback if the API is unavailable."""
+    if load_dotenv is not None:
+        load_dotenv()
 
-    In production, this function would call an LLM API using a key read from an
-    environment variable such as MSG_ROUTER_LLM_API_KEY (never hardcoded in
-    source). For now, it returns the manually validated urgency scores for the
-    six test messages in this workspace, judged purely on message text.
-    """
-    test_scores = {
-        "Are you coming home for dinner?": (False, 0.00, "Routine personal question; no urgency or scam-like language."),
-        "Claim your ₹500 cashback now, click link!": (True, 0.50, "Contains incentive language and a click trap, but does not contain the strongest scam indicators."),
-        "Reminder: PTA meeting tomorrow 5pm": (False, 0.00, "Ordinary reminder with no urgent or scam-like wording."),
-        "Your order has been delivered": (False, 0.00, "Neutral delivery update with no urgency or scam-like signals."),
-        "URGENT: your account will be suspended, verify now": (True, 0.98, "Strong urgency, threat framing, and immediate verification request make this highly scam-like."),
-        '"URGENT: Verify your account now or lose access to Amazon Prime!"': (True, 0.50, "Urgent account-access wording and pressure tactics are present, but the text is less explicit than a direct account-suspension threat."),
-    }
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key or genai is None:
+        return (
+            False,
+            0.0,
+            "LLM judge unavailable; defaulted to not urgent because the Gemini SDK or API key is not configured.",
+        )
 
-    if text in test_scores:
-        is_urgent, confidence, explanation = test_scores[text]
+    raw_response: str | None = None
+    response = None
+
+    try:
+        client = genai.Client(api_key=api_key)
+        prompt = (
+            "You are evaluating whether a message is urgent or scam-like. "
+            "Return ONLY valid JSON with keys: is_urgent (boolean), confidence (float between 0 and 1), "
+            "and explanation (string). "
+            f"Message text: {text}"
+        )
+        response = client.models.generate_content(
+            model="gemini-3.6-flash",
+            contents=prompt,
+            config={"response_mime_type": "application/json"},
+        )
+
+        parsed = getattr(response, "parsed", None)
+        if parsed is None:
+            raw_response = getattr(response, "text", None)
+            if raw_response is None:
+                candidates = getattr(response, "candidates", None) or []
+                if candidates:
+                    parts = getattr(candidates[0].content, "parts", []) or []
+                    raw_response = "".join(
+                        part.text for part in parts if getattr(part, "text", None)
+                    )
+
+            if not raw_response:
+                raise ValueError("Gemini returned an empty response body.")
+
+            cleaned_response = re.sub(
+                r"^```(?:json)?\s*|\s*```$",
+                "",
+                raw_response.strip(),
+                flags=re.IGNORECASE | re.MULTILINE,
+            )
+            parsed = json.loads(cleaned_response)
+
+        is_urgent = bool(parsed.get("is_urgent", False))
+        confidence = float(parsed.get("confidence", 0.0))
+        explanation = str(parsed.get("explanation", "Gemini provided no explanation."))
+
+        confidence = max(0.0, min(1.0, confidence))
         return is_urgent, round(confidence, 2), explanation
 
-    return (
-        False,
-        0.0,
-        f"No placeholder LLM score available for this text; raw_text={text!r}",
-    )
+    except Exception:
+        return (
+            False,
+            0.0,
+            "LLM judge failed; defaulted to not urgent because Gemini returned an invalid response.",
+        )
 
 
 def evaluate_business_domain_trust(
@@ -139,7 +190,9 @@ def evaluate_business_domain_trust(
         suspicious.append(("unverified high reports", 0.55 + 0.40 * reports_evidence_strength(reports)))
         evidence.append("unverified_high_reports=true")
     if verified_match:
+        
         # Low report counts support trust; they do not count as suspicion.
+        
         clean = 1.0 - reports_evidence_strength(reports)
         legitimate.append(("verified business sender", 0.72 + 0.18 * clean))
         evidence.append("business_trust=verified")
@@ -215,8 +268,10 @@ def score_confidence(
     sus: list[tuple[str, float]],
     action: str,
 ) -> float:
+    
     #Confidence in [0, 1] from agreement, conflict, individual signal strength,
     #and how strong a claim the action itself represents.
+    
     legit_w = [w for _, w in legit]
     sus_w = [w for _, w in sus]
     if not legit_w and not sus_w:
@@ -240,6 +295,7 @@ def score_confidence(
     # confidence as a decisive immediate/muted call, even if the underlying
     # signal (e.g. sender trust) is strong. The signal explains WHY we're
     # deferring, not that we're certain deferring is correct.
+    
     if action == "wait" and not conflict:
         confidence = min(confidence, 0.70)
 
@@ -277,6 +333,7 @@ def route_message(msg: dict[str, str], businesses: dict[str, dict[str, str]]) ->
         "confidence": f"{confidence:.2f}",
         "evidence": "; ".join(evidence_parts),
     }
+    
 
 
 def main() -> None:
@@ -290,7 +347,7 @@ def main() -> None:
         )
         writer.writeheader()
         writer.writerows(results)
-
+        
 
 if __name__ == "__main__":
     main()

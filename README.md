@@ -2,7 +2,7 @@
 
 A small Python router that scores inbox messages for **sender trust** and **urgency language**, then chooses `immediate`, `wait`, or `muted`. Quiet hours never skip those checks.
 
-The urgency signal now comes from a placeholder `judge_urgency_with_llm(text)` function that is designed to call an LLM API in production (using a key from an environment variable), but for now returns the manually validated scores for the six test messages in this workspace.
+The urgency signal now comes from `judge_urgency_with_llm(text)`, which uses the `google.genai` SDK to call Gemini (`gemini-3.6-flash`) with a key from the `GEMINI_API_KEY` environment variable. The function expects Gemini to return JSON with `is_urgent`, `confidence`, and `explanation`, then parses and validates that response. If the API call or response parsing fails, it falls back safely to a non-urgent default instead of crashing.
 
 ## Why this exists
 
@@ -11,9 +11,25 @@ Inbox filters often stop at the first matching rule (family → notify, quiet ho
 ## Requirements
 
 - Python 3.9+
-- Standard library only (`csv`, `pathlib`)
+- `python-dotenv`
+- `google-genai`
+- Standard library (`csv`, `pathlib`, `json`, `re`, `os`)
 
 ## Quick start
+
+1. Install dependencies:
+
+```bash
+pip install python-dotenv google-genai
+```
+
+2. Add your API key to a `.env` file in the project root:
+
+```env
+GEMINI_API_KEY=your_api_key_here
+```
+
+3. Run:
 
 ```bash
 python route_messages.py
@@ -70,9 +86,9 @@ Both checks run on **every** message:
    - Legitimate: verified, matching domain, and `user_reports_30d` below 10.
    - Suspicious: missing business row (when `sender_type=business`), domain mismatch, or `verified=0` with high reports.
    - Family/group senders also count as legitimate.
-2. **Urgency judge** — call `judge_urgency_with_llm(text)`, which judges the message text in isolation for urgency/scam-like language. In the current placeholder version, it returns the manually validated scores for the six test messages; in production this would call an LLM API using a key read from an environment variable such as `MSG_ROUTER_LLM_API_KEY`.
+2. **Urgency judge** — call `judge_urgency_with_llm(text)`, which judges the message text in isolation for urgency/scam-like language by calling Gemini using `google.genai`. The function is designed to parse JSON in the format `{ "is_urgent": bool, "confidence": float, "explanation": string }`, and it safely falls back to a non-urgent default if the API call or JSON parsing fails.
 
-> CSV parsing note: `csv.DictReader` already handles CSV quote escaping correctly. The placeholder urgency lookup matches the exact decoded `text` value from the CSV, rather than stripping quote characters a second time.
+> CSV parsing note: `csv.DictReader` already handles CSV quote escaping correctly. The urgency judge matches the exact decoded `text` value from the CSV, rather than stripping quote characters a second time.
 
 Then combine:
 
