@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 
-"""Route inbox messages by combining independent trust and urgency signals.
+"""
+FINAL
+Route inbox messages by combining independent trust and urgency signals.
 Output includes a confidence score in [0.0, 1.0] based on how many signals
 agree, whether they conflict, and how strong each signal is.
+
 """
 
 from __future__ import annotations
