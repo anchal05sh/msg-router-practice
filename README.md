@@ -134,4 +134,4 @@ msg-router-practice/
 
 ## License
 
-Use and modify freely for hpractice work.
+Use and modify freely for practice work.
